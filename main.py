@@ -1,50 +1,56 @@
 import string
 import random
-from dataclasses import dataclass, field
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
-from plotnine import *
 
 
-def generate_id() -> str:
-    return "".join(random.choices(string.ascii_uppercase, k=12))
+# from manual_test import *
+
+# Following on from the IIA project handout, we formulate both the ML estimate,
+# the Bayesian posterior density and Bayesian estimates for parameters for simple
+# model y_n = c + e_n where c is a constant, e_n is gaussian iid noise and y_n
+# are observations
 
 
-@dataclass
-class Person:
-    name: str
-    address: str
-    active: bool = True
-    email_addresses: list[str] = field(default_factory=list)
-    id: str = field(init=False, default_factory=generate_id)
+def actual_function(x):
+    return 1 + x - 1.4 * x ** 2 + 0.15 * x ** 3
 
 
-def main() -> None:
-    person = Person(name="John", address="123 Main St")
-    print(person)
+def observation(x, sigma):
+    return actual_function(x) + np.random.normal(0, sigma)
 
 
-x = np.linspace(0, 100, 100)
-y = [np.random.randint(30) for i in range(100)]
+def lin_basis_function(x_points, degree=2):
+    result = np.transpose(np.array([[x_points[0] ** i for i in range(degree)]]))
+    for x in x_points[1:]:
+        result = np.concatenate((result, np.transpose(np.array([[x ** i for i in range(degree)]]))), axis=1)
+    return np.transpose(result)
 
 
-def mplplot() -> None:
-    plt.plot(x, y)
-    plt.show()
+def maximum_likelihood(x_points, y_points):
+    matrix = lin_basis_function(x_points, degree=6)
+    w = np.linalg.inv(np.transpose(matrix) @ matrix) @ np.transpose(matrix) @ y_points
+    print(w)
+    return w
+
+def resynth(w, x):
+    basis = [x ** i for i in range(len(w))]
+    return np.dot(w,basis)
 
 
-def gg_plot():
-    data = {'X': x, 'Y': y}
-    df = pd.DataFrame(data)
-    g = ggplot(df, aes(x=x, y=y)) + geom_line()
-    return g
-    #
-    # fig = g.duraw()
-    # fig.show()
+x = np.linspace(1, 8, 10)
+y = [observation(i, 1) for i in x]
 
-if __name__ == '__main__':
-    # main()
-    plot = gg_plot()
-    print(plot)
+w = maximum_likelihood(x,y)
+y_sim = [resynth(w, i) for i in x]
 
+
+plt.plot(x, y)
+plt.plot(x, y_sim)
+plt.show()
+
+# matrix = lin_basis_function(x)
+# print(matrix)
+
+
+# Let us assume that the sound
