@@ -2,55 +2,61 @@ import string
 import random
 import numpy as np
 import matplotlib.pyplot as plt
+import librosa
+
+import scipy.io.wavfile as si
+import scipy.stats as stats
+import scipy.integrate as scint
+
+from tqdm import tqdm
+
+y, sr = librosa.load("recordings/download.wav", sr=44100, offset=0.6, duration = 1)
+
+class ProcessAudio:
+    def __init__(self, recording) -> None:
+        self.recording = recording
+        self.sampling_frequency = librosa.load(recording)[1]
+        self.samples = librosa.load(recording)[0]
+        self.N = len(self.samples)
+
+    def __str__(self) -> str:
+        info = f"Sampling Frequency: {self.sampling_frequency} \n", f"Num. Samples:{self.N}"
+        return info
+
+    def windowfunctions(samples, window_length):
+        """Generate the Hanning window matrix based on number of samples and length of windows.
+        Inputs:
+            samples - Array of samples
+            window_length - Desired length of windows
+        Outputs:
+            window_function - matrix of n x l window values, where n is number of windows and l in number of samples"""
+        num_samples = len(samples)
+        rem = len(sample_no) % (window_length // 2)
+        hann = np.hanning(window_length)
+
+        windows = range(0, num_samples, window_length // 2)
+
+        x = np.zeros(num_samples)
+
+        y = np.zeros(num_samples)
+        y[:window_length // 2] = hann[-window_length // 2:]
+        window_function = y
+
+        for window in windows[1:-1]:
+            y = np.zeros(num_samples)
+            y[window - window_length // 2:window + window_length // 2] = hann
+            window_function = np.concatenate((window_function, y))
+
+        y = np.zeros(num_samples)
+        y[windows[-1] - window_length // 2:windows[-1] + rem] = hann[:window_length // 2 + rem]
+        window_function = np.concatenate((window_function, y))
+
+        y = np.zeros(num_samples)
+        y[-rem:] = hann[:rem]
+        window_function = np.concatenate((window_function, y))
+
+        window_function = np.reshape(window_function, (len(window_function) // (num_samples), num_samples))
+
+        return window_function
 
 
-# from manual_test import *
-
-# Following on from the IIA project handout, we formulate both the ML estimate,
-# the Bayesian posterior density and Bayesian estimates for parameters for simple
-# model y_n = c + e_n where c is a constant, e_n is gaussian iid noise and y_n
-# are observations
-
-
-def actual_function(x):
-    return 1 + x - 1.4 * x ** 2 + 0.15 * x ** 3
-
-
-def observation(x, sigma):
-    return actual_function(x) + np.random.normal(0, sigma)
-
-
-def lin_basis_function(x_points, degree=2):
-    result = np.transpose(np.array([[x_points[0] ** i for i in range(degree)]]))
-    for x in x_points[1:]:
-        result = np.concatenate((result, np.transpose(np.array([[x ** i for i in range(degree)]]))), axis=1)
-    return np.transpose(result)
-
-
-def maximum_likelihood(x_points, y_points):
-    matrix = lin_basis_function(x_points, degree=6)
-    w = np.linalg.inv(np.transpose(matrix) @ matrix) @ np.transpose(matrix) @ y_points
-    print(w)
-    return w
-
-def resynth(w, x):
-    basis = [x ** i for i in range(len(w))]
-    return np.dot(w,basis)
-
-
-x = np.linspace(1, 8, 10)
-y = [observation(i, 1) for i in x]
-
-w = maximum_likelihood(x,y)
-y_sim = [resynth(w, i) for i in x]
-
-
-plt.plot(x, y)
-plt.plot(x, y_sim)
-plt.show()
-
-# matrix = lin_basis_function(x)
-# print(matrix)
-
-
-# Let us assume that the sound
