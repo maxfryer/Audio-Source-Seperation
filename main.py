@@ -2,13 +2,19 @@ import string
 import random
 import numpy as np
 import matplotlib.pyplot as plt
+
 import librosa
+import librosa.display
 
 import scipy.io.wavfile as si
 import scipy.stats as stats
 import scipy.integrate as scint
 
 from tqdm import tqdm
+
+# We'll need IPython.display's Audio widget
+from IPython.display import Audio
+
 
 y, sr = librosa.load("recordings/download.wav", sr=44100, offset=0.6, duration = 1)
 
@@ -20,20 +26,26 @@ class ProcessAudio:
         self.samples = librosa.load(recording, sr=44100)[0]
         self.N = len(self.samples)
         self.start = 0
-        self.end = self.N/self.sampling_frequency
+        self.stop= self.N
         self.sample_counter = np.array(range(self.N))
+        self.windows = self.generate_window_functions(5000)
+        self._raw_samples = librosa.load(recording, sr=44100)[0]
 
     def __str__(self) -> str:
         return f"Recording File: {self.recording} \n" \
         + f"Sampling Frequency: {self.sampling_frequency} \n" \
-        + f"Number of Samples: {self.N} ({(self.N/self.sampling_frequency):.2f}s) \n" \
-        + f"{self.start}s to {self.end:.2f}s ({self.end - self.start:.2f}s) \n" \
+        + f"Samples: {self.start} to {self.stop} ({self.N}) \n" \
+        + f"Time: {(self.start/self.sampling_frequency):.2f}s to {(self.stop/self.sampling_frequency):.2f}s " \
+            + f"({((self.stop- self.start)/self.sampling_frequency):.2f}s) \n" \
 
     def set_duration(self, start, stop):
-        self.start = start
-        self.end = stop
-        self.N = int((self.end-self.start) * self.sampling_frequency)
+        self.start = int(start * self.sampling_frequency)
+        self.stop= int(stop * self.sampling_frequency)
+        self.N = self.stop-self.start
         self.sample_counter = np.array(range(self.N))
+        self.windows = self.generate_window_functions(5000)
+        self.samples = self._raw_samples[self.start:self.stop]
+        print(self.__str__()) # show updated info
 
     def generate_window_functions(self, window_length):
         """Generate the Hanning window matrix based on number of samples and length of windows.
@@ -67,7 +79,7 @@ class ProcessAudio:
         window_function = np.concatenate((window_function, y))
 
         window_function = np.reshape(window_function, (len(window_function) // (self.N), self.N))
-        print(f"Windows:{window_function.shape}")
+        print(f"Windows: {window_function.shape}")
         return window_function
 
     def generate_d_matrix(self, windows, model_order):
@@ -86,5 +98,42 @@ class ProcessAudio:
             d_matrix[t] = np.array([windows_vec])
         print(f"D:{d_matrix.shape}")
         return d_matrix
+
+
+class VisualiseData:
+    def __init__(self, data) -> None:
+        self.data = data
+        self.N = len(self.data)
+        self.sample_counter = np.array(range(self.N))
+
+
+    def __str__(self) -> str:
+        return f"Length: {self.N}"
+
+    def visualise(self):
+        self.constant_q_spectrogram(self)
+        self.spectrogram(self)
+
+    def constant_q_spectrogram(self):
+        C = np.abs(librosa.iirt(self.data, sr=sr))
+        fig, ax = plt.subplots()
+        img = librosa.display.specshow(librosa.amplitude_to_db(C, ref=np.max),
+                                    sr=sr, x_axis='time', y_axis='cqt_note', ax=ax)
+        ax.set_title('Constant-Q Power Spectrum')
+        fig.colorbar(img, ax=ax, format="%+2.0f dB")
+        plt.show()
+
+    def spectrogram(self):
+        D = librosa.stft(self.data)  # STFT of y
+        S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+        fig, ax = plt.subplots()
+        img = librosa.display.specshow(S_db, x_axis='time', y_axis='linear', ax=ax)
+        ax.set(title='Spectogram')
+        fig.colorbar(img, ax=ax, format="%+2.f dB")
+        plt.show()
+
+
+
+    
 
 
