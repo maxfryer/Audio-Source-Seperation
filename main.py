@@ -16,7 +16,7 @@ from tqdm import tqdm
 from IPython.display import Audio
 
 
-y, sr = librosa.load("recordings/download.wav", sr=44100, offset=0.6, duration = 1)
+# y, sr = librosa.load("recordings/download.wav", sr=44100, offset=0.6, duration = 1)
 
 class ProcessAudio:
     def __init__(self, recording, root_freq) -> None:
@@ -105,7 +105,6 @@ class VisualiseData:
         self.data = data
         self.N = len(self.data)
         self.sample_counter = np.array(range(self.N))
-
 
     def __str__(self) -> str:
         return f"Length: {self.N}"
