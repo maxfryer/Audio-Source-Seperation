@@ -10,7 +10,7 @@ root_freq = 261.6
 # root_freq = 4730
 
 # y, sr = librosa.load("download.wav", sr=44100)
-y, sr = librosa.load("download.wav", sr=44100, offset=0.8)
+y, sr = librosa.load("recordings/download.wav", sr=44100, offset=0.8)
 sample_no = list(range(len(y)))
 
 
