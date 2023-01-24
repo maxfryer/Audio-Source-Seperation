@@ -16,6 +16,12 @@ sample_no = list(range(len(y)))
 
 
 def windowfunctions(samples, window_length):
+    """Generate the Hanning window matrix based on number of samples and length of windows.
+    Inputs:
+        samples - Array of samples
+        window_length - Desired length of windows
+    Outputs:
+        window_function - matrix of n x l window values, where n is number of windows and l in number of samples"""
     num_samples = len(samples)
     rem = len(sample_no) % (window_length // 2)
     hann = np.hanning(window_length)
@@ -43,7 +49,6 @@ def windowfunctions(samples, window_length):
 
     window_function = np.reshape(window_function, (len(window_function) // (num_samples), num_samples))
 
-    print(window_function.shape)
     return window_function
 
 
@@ -147,15 +152,43 @@ def resynth_sound(w, dmat):
     y = dmat @ w
     return y
 
+
+
+def actual_function(x):
+    return 1 + x - 1.4 * x ** 2 + 0.15 * x ** 3
+
+
+def observation(x, sigma):
+    return actual_function(x) + np.random.normal(0, sigma)
+
+
+def lin_basis_function(x_points, degree=2):
+    result = np.transpose(np.array([[x_points[0] ** i for i in range(degree)]]))
+    for x in x_points[1:]:
+        result = np.concatenate((result, np.transpose(np.array([[x ** i for i in range(degree)]]))), axis=1)
+    return np.transpose(result)
+
+
+def maximum_likelihood(x_points, y_points):
+    matrix = lin_basis_function(x_points, degree=6)
+    w = np.linalg.inv(np.transpose(matrix) @ matrix) @ np.transpose(matrix) @ y_points
+    print(w)
+    return w
+
+def resynth(w, x):
+    basis = [x ** i for i in range(len(w))]
+    return np.dot(w,basis)
+
+
 # priors(y,1)
 
 windows = windowfunctions(sample_no, 5000)
-plt.plot(windows[3])
-plt.show()
+dmat = dmatrix(sample_no, windows, 10)
+print(dmat.shape)
 # dmat = dmatrixofdmatrix(sample_no, windows, 10)
 '''
 
-dmat = dmatrix(sample_no, windows, 10)
+
 w = maximumlikelihood(y, dmat)
 y_sim = resynth_sound(w, dmat)
 plt.plot(sample_no,y)
