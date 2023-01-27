@@ -14,60 +14,110 @@ y, sr = librosa.load("recordings/download.wav", sr=44100, offset=0.6, duration =
 # si.write('mixed.wav', 44100, mix_scale)
 sample_no = list(range(len(y)))
 
-
-def windowfunctions(samples, window_length):
-    """Generate the Hanning window matrix based on number of samples and length of windows.
+def grw(log_target, u0, data, K, G, n_iters, beta):
+    """ Gaussian random walk Metropolis-Hastings MCMC method
+        for sampling from pdf defined by log_target.
     Inputs:
-        samples - Array of samples
-        window_length - Desired length of windows
-    Outputs:
-        window_function - matrix of n x l window values, where n is number of windows and l in number of samples"""
-    num_samples = len(samples)
-    rem = len(sample_no) % (window_length // 2)
-    hann = np.hanning(window_length)
+        log_target - log-target density
+        u0 - initial sample
+        y - observed data
+        K - prior covariance
+        G - observation matrix
+        n_iters - number of samples
+        beta - step-size parameter
+    Returns:
+        X - samples from target distribution
+        acc/n_iters - the proportion of accepted samples"""
 
-    windows = range(0, num_samples, window_length // 2)
+    X = []
+    acc = 0
+    u_prev = u0
+    N= u0.shape[0]
 
-    x = np.zeros(num_samples)
+    # Inverse computed before the for loop for speed
+    Kc = np.linalg.cholesky(K + 1e-6 * np.eye(N))
+    Kc_inverse = np.linalg.inv(Kc)
+    K_inverse = Kc_inverse.T @ Kc_inverse # Compute the inverse of K using its Cholesky decomopsition
 
-    y = np.zeros(num_samples)
-    y[:window_length // 2] = hann[-window_length // 2:]
-    window_function = y
+    lt_prev = log_target(u_prev, data, K_inverse, G)
 
-    for window in windows[1:-1]:
-        y = np.zeros(num_samples)
-        y[window - window_length // 2:window + window_length // 2] = hann
-        window_function = np.concatenate((window_function, y))
+    zs = np.random.randn(N, n_iters)
 
-    y = np.zeros(num_samples)
-    y[windows[-1] - window_length // 2:windows[-1] + rem] = hann[:window_length // 2 + rem]
-    window_function = np.concatenate((window_function, y))
+    for i in range(n_iters):
 
-    y = np.zeros(num_samples)
-    y[-rem:] = hann[:rem]
-    window_function = np.concatenate((window_function, y))
+        z = zs[:, i]
 
-    window_function = np.reshape(window_function, (len(window_function) // (num_samples), num_samples))
+        u_new = u_prev + beta*(Kc @ z) # Propose new sample - use prior covariance, scaled by beta
 
-    return window_function
+        lt_new = log_target(u_new, data, K_inverse, G)
+
+        log_alpha = np.minimum(lt_new - lt_prev, 0)  # Calculate acceptance probability based on lt_prev, lt_new
+    
+        log_u = np.log(np.random.random())
+
+        # Accept/Reject
+        accept = log_alpha >= log_u # Compare log_alpha and log_u to accept/reject sample (accept should be boolean)
+        if accept:
+            acc += 1
+            X.append(u_new)
+            u_prev = u_new
+            lt_prev = lt_new
+        else:
+            X.append(u_prev)
+
+    return X, acc / n_iters
 
 
-def dmatrix(samples, windows, model_order):
-    # Will have to alter this to add more than one note
-    d_matrix = np.empty((len(samples), 2 * len(windows) * model_order))
+def pcn(log_likelihood, u0, y, K, G, n_iters, beta):
+    """ pCN MCMC method for sampling from pdf defined by log_prior and log_likelihood.
+    Inputs:
+        log_likelihood - log-likelihood function
+        u0 - initial sample
+        y - observed data
+        K - prior covariance
+        G - observation matrix
+        n_iters - number of samples
+        beta - step-size parameter
+    Returns:
+        X - samples from target distribution
+        acc/n_iters - the proportion of accepted samples"""
 
-    for t in tqdm(samples):
-        # collects array of basis weights for each time point
-        windows_vec = np.empty((0, 2 * model_order))
-        for num, window in enumerate(windows):
-            # collects array of basis cosines and sines for each window
-            weights = window[t] * np.array(
-                [(np.cos(2 * np.pi * m * root_freq * t / 44100), np.sin(2 * np.pi * m * root_freq * t / 44100)) for m in
-                 range(1, model_order + 1)])
-            windows_vec = np.append(windows_vec, weights)
-        d_matrix[t] = np.array([windows_vec])
-    print(d_matrix.shape)
-    return d_matrix
+    X = []
+    acc = 0
+    u_prev = u0
+
+    N = u0.shape[0]
+
+    # Inverse computed before the for loop for speed
+    Kc = np.linalg.cholesky(K + 1e-6 * np.eye(N))
+
+    ll_prev = log_likelihood(u_prev, y, G)
+
+    zs = np.random.randn(N, n_iters)
+
+    for i in range(n_iters):
+        z = zs[:, i]
+
+        u_new = np.sqrt(1-beta**2)*u_prev + beta*(Kc @ z) #: Propose new sample using pCN proposal
+
+        ll_new = log_likelihood(u_new, y, G)
+
+        log_alpha = np.minimum(ll_new - ll_prev, 0) #: Calculate pCN acceptance probability
+        log_u = np.log(np.random.random())
+
+        # Accept/Reject
+        accept = log_alpha >= log_u #: Compare log_alpha and log_u to accept/reject sample (accept should be boolean)
+        if accept:
+            acc += 1
+            X.append(u_new)
+            u_prev = u_new
+            ll_prev = ll_new
+        else:
+            X.append(u_prev)
+
+    return X, acc / n_iters
+
+
 
 def dmatrixofdmatrix(samples, windows, model_order):
     
@@ -86,6 +136,23 @@ def dmatrixofdmatrix(samples, windows, model_order):
             windows_vec = np.append(windows_vec, weights)
         d_matrix[t] = np.array([windows_vec])
 
+    return d_matrix
+
+def generate_d_matrix(self, windows, model_order):
+    # Will have to alter this to add more than one note
+    d_matrix = np.empty((self.N , 2 * len(windows) * model_order))
+
+    for t in tqdm(self.sample_counter):
+        # collects array of basis weights for each time point
+        windows_vec = np.empty((0, 2 * model_order))
+        for num, window in enumerate(windows):
+            # collects array of basis cosines and sines for each window
+            weights = window[t] * np.array(
+                [(np.cos(2 * np.pi * m * self.root_frequency * t / 44100), np.sin(2 * np.pi * m * self.root_frequency * t / 44100)) for m in
+                range(1, model_order + 1)])
+            windows_vec = np.append(windows_vec, weights)
+        d_matrix[t] = np.array([windows_vec])
+    print(f"D:{d_matrix.shape}")
     return d_matrix
 
 

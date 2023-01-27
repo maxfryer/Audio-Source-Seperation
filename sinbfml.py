@@ -205,7 +205,7 @@ plt.show()
 # #
 
 '''
-times = range(0,440)
+times = range(0,44100)
 y = [example_tone(t, root_freq, 0) for t in times]
 w = maximum_likelihood(times, y)
 y_sim = [resynth_sound(w, i) for i in times]
