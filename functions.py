@@ -21,8 +21,8 @@ def frequency_priors():
     for f in range(89):
         frequencies[f] = 440*(2**(1/12))**(f-49)
         frequencies[f] = 440*2**((np.round_(12*np.log2(frequencies[f]/440)))/12)
-    print(frequencies)
-
+    return frequencies
+    
 def grw(log_target, u0, data, K, G, n_iters, beta):
     """ Gaussian random walk Metropolis-Hastings MCMC method
         for sampling from pdf defined by log_target.

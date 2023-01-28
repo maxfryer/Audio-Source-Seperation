@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import norm, multivariate_normal
+from scipy.stats import norm, multivariate_normal, poisson, invgamma
 
 
 def generate_S(D, SNR, R, I):
@@ -28,12 +28,16 @@ def log_prior(B, M, K, w, noise_var):
     return log_B(M, K, w, noise_var) + log_w(M, K) \
         + log_M(K) + log_K() + log_noise_var()
 
-def log_B(B, M, K, w, noise_var):
+def log_B(B, noise_var):
+    # p(B|w,M,K,noise_var) is a zero mean multivariate Gaussian
+    n = len(B)
+    cov = noise_var * np.eye(n)
+    prob = multivariate_normal(mean=np.zeros(n), cov=cov).pdf(B)
+    return prob
 
-    return 0
-
-def log_w(w_est, K, M, sigma):
+def prior_w(ws, K, M, sigma):
     # P(w_est|K, M, sigma)
+    w_est = ws.flatten()
     n  = np.sum(M)
     cov = sigma * np.eye(n)
     w = np.zeros(n)
@@ -50,16 +54,28 @@ def log_w(w_est, K, M, sigma):
     prob = multivariate_normal(mean=np.zeros(n), cov=cov).pdf(error)
     return prob
 
-def log_M(M, K):
-    return 0
+def prior_M(M, mu=10):
+    # p(M|K)
+    prob=1
+    # multiplicative sum of poisson likelihoods
+    p = lambda k: poisson.pmf(k,mu)
+    for order in M:
+        prob *= p(order)
+    return prob
 
-def log_K(K):
-    return 0
+def prior_K(K, theorectic_K, sigma=2):
+    # P(K|K_theoretic, sigma)
+    n  = K.shape[0]
+    cov = sigma * np.eye(n)
+    w = np.zeros(n)
+    
+    # Calculate Error and multivariate prob of error
+    error = np.array(theorectic_K - K)
+    prob = multivariate_normal(mean=np.zeros(n), cov=cov).pdf(error)
+    return prob
 
-def log_noise_var(noise_var):
-    return 0
-
-
+def prior_noise_var(noise_var,mean):
+    return invgamma.pdf(noise_var, 1/mean)
 
 
 if __name__ == '__main__':
@@ -67,6 +83,8 @@ if __name__ == '__main__':
     K = np.array([2,3])
     M = np.array([3,4])
 
-    prob = log_w(w_est,K,M,0.00001)
+    prob = prior_w(w_est,K,M,sigma=0.4)
     print(prob)
     
+    prob = prior_noise_var(0.01,0.01)
+    print(prob)

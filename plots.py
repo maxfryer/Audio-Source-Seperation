@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import norm, poisson
+from scipy.stats import norm, poisson, invgamma
 
 
 
@@ -76,6 +76,19 @@ def plot_k_prior(frequencies,sigma):
     plt.ylabel("Probability")
     plt.show()
 
+def plot_noise_prior(mean):
+
+    fig, ax = plt.subplots(1, 1)
+    a = 1/mean
+    x = np.linspace(invgamma.ppf(0.01, a),
+                    invgamma.ppf(0.99, a), 100)
+    ax.plot(x, invgamma.pdf(x, a))
+
+    fig.suptitle("Noise Prior P($\sigma^2$) (Inverse Gamma), mean=1e-2")
+    plt.xlabel("$\sigma^2$")
+    plt.ylabel("Probability")
+    plt.show()
+
 if __name__ == '__main__':
     # Plot the frequency prior
     K = [293.66, 659.25]
@@ -90,6 +103,9 @@ if __name__ == '__main__':
     # K = [293.66, 659.25]
     K = freqs[28:52]
     plot_k_prior(K,2)
+
+    # Plot noise prior
+    plot_noise_prior(1e-2)
 
 
     

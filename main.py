@@ -60,7 +60,7 @@ class ProcessAudio:
         w = []
         for i, root in enumerate(Notes):
             w.append([root*i for i in range(1, Orders[i]+1)])
-        self.w = w
+        self.w = np.array(w)
 
     def generate_window_functions(self, window_length):
         window_starts = np.arange(0, self.N, window_length // 2)
