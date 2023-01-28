@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm, multivariate_normal
 
+
 def generate_S(D, SNR, R, I):
     a = D.T @ D + (1/SNR) * np.eye(2*R*(I+1))
     return np.linalg.inv(a)
@@ -58,8 +59,14 @@ def log_K(K):
 def log_noise_var(noise_var):
     return 0
 
-print(log_w(np.array([2,4,6,3,6,9,12]),np.array([2,3]),np.array([3,4]),0.3))
 
 
 
+if __name__ == '__main__':
+    w_est = np.array([2,4,6,3,6,9,12])
+    K = np.array([2,3])
+    M = np.array([3,4])
 
+    prob = log_w(w_est,K,M,0.00001)
+    print(prob)
+    

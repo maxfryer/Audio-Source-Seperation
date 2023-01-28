@@ -14,6 +14,15 @@ y, sr = librosa.load("recordings/download.wav", sr=44100, offset=0.6, duration =
 # si.write('mixed.wav', 44100, mix_scale)
 sample_no = list(range(len(y)))
 
+def frequency_priors():
+    # Returns array of equal tempered note frequencies
+    
+    frequencies = np.zeros(89)
+    for f in range(89):
+        frequencies[f] = 440*(2**(1/12))**(f-49)
+        frequencies[f] = 440*2**((np.round_(12*np.log2(frequencies[f]/440)))/12)
+    print(frequencies)
+
 def grw(log_target, u0, data, K, G, n_iters, beta):
     """ Gaussian random walk Metropolis-Hastings MCMC method
         for sampling from pdf defined by log_target.
