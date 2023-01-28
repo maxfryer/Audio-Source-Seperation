@@ -143,7 +143,6 @@ class ProcessAudio:
             for a in range(order): 
                 colours_arg.append(colours[i])
 
-
         # Number of samplepoints
         N = len(self.samples)
         # sample spacing
@@ -164,10 +163,13 @@ class ProcessAudio:
         plt.show()
     
 class AnalyseAudio:
-    def __init__(self, D, x) -> None:
+    def __init__(self, D, x, M, K, w) -> None:
         self.D = D
         self.x = x
         self.B = None
+        self.M = M
+        self.K = K
+        self.w = w
         pass
 
     def MLE(self):
@@ -223,7 +225,8 @@ class VisualiseAudio:
         xf = np.linspace(0.0, 1.0/(2.0*T), N//2)
 
         fig, ax = plt.subplots()
-        ax.plot(xf[:5000], (2.0/N * np.abs(yf[:N//2]))[:5000])
+        ax.plot(xf, (2.0/N * np.abs(yf[:N//2])))
+        plt.xlim([0,5000])
         plt.show()
 
 
