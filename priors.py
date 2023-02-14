@@ -13,6 +13,10 @@ def generate_P(D, S, N):
 def generate_D(K, M, w):
     return
 
+def posterior_frequecies(w, M, K, y, gamma, nu):
+
+    P = generate_P()
+    p =  ()
 
 
 ###--- Density functions ---###
@@ -21,14 +25,17 @@ def log_likelihood(N, noise_var, y, D, B):
     return -0.5*N*np.log(noise_var) - np.linalg.norm(y - D @ B)
 
 
-def log_prior(B, M, K, w, noise_var):
+def complete_prior(B, M, K, w, noise_var, K_theoretic):
     # structure of prior is
     # p(B|w,M,K,noise_var) x p(w|M,K) x p(M|K)
     # x p(K) x p(noise_var)
-    return log_B(M, K, w, noise_var) + log_w(M, K) \
-        + log_M(K) + log_K() + log_noise_var()
+    w_sd = 40
+    M_mean = 10
+    sig_mean =1e-2
+    return priors_B(B, noise_var) * prior_w(w, K, M, w_sd) \
+        * prior_M(M, M_mean) * prior_K(K, K_theoretic) * prior_noise_var(noise_var,sig_mean)
 
-def log_B(B, noise_var):
+def priors_B(B, noise_var):
     # p(B|w,M,K,noise_var) is a zero mean multivariate Gaussian
     n = len(B)
     cov = noise_var * np.eye(n)

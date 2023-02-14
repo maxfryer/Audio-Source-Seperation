@@ -101,7 +101,7 @@ if __name__ == '__main__':
     # Plot K priors
     freqs = frequency_priors()
     # K = [293.66, 659.25]
-    K = freqs[28:52]
+    # K = freqs[28:52]
     plot_k_prior(K,2)
 
     # Plot noise prior
