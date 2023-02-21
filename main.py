@@ -21,7 +21,6 @@ from IPython.display import Audio
 
 # y, sr = librosa.load("recordings/download.wav", sr=44100, offset=0.6, duration = 1)
 
-
 class AudioSourceSeperation:
     def __init__(self, recording) -> None:
         self.recording = recording
@@ -36,6 +35,7 @@ class AudioSourceSeperation:
         self.windows = self.generate_window_functions(self.window_length)
         self.I = self.windows.shape[0]
         self.K = None
+        self.sigma = None
         
     def __str__(self) -> str:
         return f"Recording File: {self.recording} \n" \
@@ -114,7 +114,7 @@ class AudioSourceSeperation:
         width = 2 * np.sum(self.M)
         D = np.zeros((self.N, width * self.I))
         
-        for i in tqdm(range(self.I)):
+        for i in range(self.I):
             note = np.zeros((self.N, width))
             for sample in range(self.window_starts[i],self.window_starts[i+2]):
                 counter = 0
@@ -143,11 +143,35 @@ class AudioSourceSeperation:
         resynthed = self.resynth_sound()
         error = np.linalg.norm(self.samples - resynthed)
         return error
+    
+    def log_sigma(self, sigma):
+        self.sigma = sigma
+        # self.w = w
+        # self.M = M
+        # self.K = K
+        w_prior = [293.66, 659.25]
+        SNR = 15
+        gamma,nu = 1e-4,1e-4
+        # self.generate_D()
+        # self.generate_S(SNR)
+        # self.generate_P()
 
-    def log_posterior(self, w, M, K):
+        ytPy = self.samples.T @ self.P @ self.samples
+        log_p = (-(gamma + ytPy)/(2*self.sigma**2)) -(self.N+nu+2)*np.log(self.sigma)
+        return log_p
+
+    def log_beta(self, beta):
+        self.beta = beta
+        mean = self.S @ self.D.T @ self.samples
+        cov = self.sigma **2 *self.S
+        error = self.beta - mean
+        log_p = multivariate_normal(mean=mean, cov=cov).logpdf(error)
+        return log_p
+
+    def log_posterior(self, w):
         self.w = w
-        self.M = M
-        self.K = K
+        self.M = [15,15]
+        self.K = 2
         w_prior = [293.66, 659.25]
         SNR = 15
         gamma,nu = 1e-4,1e-4
@@ -164,35 +188,72 @@ class AudioSourceSeperation:
     def generate_S(self, SNR):
         R = np.sum(self.M)
         a = self.D.T @ self.D + (1/SNR) * np.eye(2*R*(self.I))
-        print("Inverting S...")
+        # print("Inverting S...")
         S = np.linalg.inv(a)
-        print("S Inverted")
+        # print("S Inverted")
         self.S = S
         return S
 
     def generate_P(self):
-        print("Generating P...")
+        # print("Generating P...")
         P = np.eye(self.N) - self.D @ self.S @ self.D.T
-        print("P Generated")
+        # print("P Generated")
         self.P = P
         return P
 
-    def MCMC(self):
-        # Sample root frequency from uniform distribution over possible root frequencies
-        # Sample detuning parameter from normal distribution
-        w_init = []
-        for i in range(self.K):
-            # 2.1 so that when noise is added doesn't go over nyquist freq
-            max_freq = self.rate/(2.1 * self.M[i]) 
-            r = stats.uniform.rvs(loc=0, scale = max_freq)
-            w_init.append(r)
-        
-        
+    def MCMC(self, w_init, n_iters=30, beta=40):
+        # theta = [w1,w2]
+        # theta = theta_init
+
+        # while l < L:
+
+            # theta =  theta_last
+            # form candidate root frequencies
+                # 85% normal distribution around previous theta[0]
+                # 15% uniform distribution
+                # theta[0] = new theta
+            # MH step
+            # new root_freq = (either old or new)
+
+            # theta = theta_last
+            # form candidate sigma
+                # theta[1] = new theta
+            # MH step
+            # new sigma = (either old or new)
+
+            # theta = [new_root, new_sigma]
+             
+        X = []
+        acc = 0
+        w_prev = w_init
+
+        ll_prev = self.log_posterior(w_prev)
 
 
+        rand = [np.exp(-2*i/n_iters) for i in np.arange(n_iters)]
 
-    
+        for i in tqdm(range(n_iters)):
 
+            w_new = w_prev + beta * np.random.normal(0, 5,(1,2))[0]
+            print(f"proposal:{w_new}")
+            print(f"current:{w_prev}")
+
+            ll_new = self.log_posterior(w_new)
+
+            log_alpha = np.minimum(ll_new - ll_prev, 0) #: Calculate pCN acceptance probability
+            log_u = np.log(np.random.random())
+
+            # Accept/Reject
+            accept = log_alpha >= log_u #: Compare log_alpha and log_u to accept/reject sample (accept should be boolean)
+            if accept:
+                acc += 1
+                X.append(w_new)
+                w_prev = w_new
+                ll_prev = ll_new
+            else:
+                X.append(w_prev)
+
+        return X, acc / n_iters
 
     def fft_plot(self):
         colours = ["blue","orange", "green", "red", "pink"]
