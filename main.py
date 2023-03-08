@@ -2,6 +2,7 @@ import string
 import random
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 import librosa
 import librosa.display
@@ -22,7 +23,7 @@ from IPython.display import Audio
 # y, sr = librosa.load("recordings/download.wav", sr=44100, offset=0.6, duration = 1)
 
 class AudioSourceSeperation:
-    def __init__(self, recording) -> None:
+    def __init__(self, recording, window_length = 2205) -> None:
         self.recording = recording
         self.rate = librosa.load(recording, sr=44100)[1]
         self.samples = librosa.load(recording, sr=44100)[0]
@@ -31,11 +32,12 @@ class AudioSourceSeperation:
         self.start = 0
         self.stop= self.N
         self.sample_counter = np.array(range(self.N))
-        self.window_length = 5000
+        self.window_length = window_length
         self.windows = self.generate_window_functions(self.window_length)
         self.I = self.windows.shape[0]
         self.K = None
         self.sigma = None
+        self.time = (self.stop- self.start)/self.rate
         
     def __str__(self) -> str:
         return f"Recording File: {self.recording} \n" \
@@ -93,9 +95,6 @@ class AudioSourceSeperation:
         return windows
     
     def generate_M_K_w(self, w, M):
-        self.w = w
-        self.K = len(w)
-        self.M = M
         ws = []
         for i, root in enumerate(w):
             ws.append([root*i for i in range(1, M[i]+1)])
@@ -133,6 +132,8 @@ class AudioSourceSeperation:
         self.stop = self.N
         self.windows = self.generate_window_functions(self.window_length)
         self.I = self.windows.shape[0]
+        self.recording = "numpy"
+        self.time = (self.stop- self.start)/self.rate
         print(self.__str__()) # show updated info
         return
 
@@ -184,6 +185,32 @@ class AudioSourceSeperation:
 
         log_p = -0.5*(self.N)*np.log(gamma + ytPy) # + 0.5*np.log(np.linalg.det(self.S))
         return(log_p)
+    
+    def single_log_posterior(self, w):
+        self.w = np.array(w)
+        SNR = 15
+        gamma,nu = 1e-4,1e-4
+        self.M = [15]
+        self.K = 1
+
+        # start = time.process_time()
+        self.generate_D()
+        # print("Generate D:", time.process_time() - start)
+        
+        # start = time.process_time()
+        self.generate_S(SNR)
+        # print("Generate S:", time.process_time() - start)
+        
+        # start = time.process_time()
+        self.generate_P()
+        # print("Generate P:", time.process_time() - start)
+        
+        # start = time.process_time()
+        ytPy = self.samples.T @ self.P @ self.samples
+        log_p = -0.5*(self.N)*np.log(gamma + ytPy) #+ 0.5*np.log(np.linalg.det(self.S))
+        # print("Calculate Prob:", time.process_time() - start)
+
+        return(log_p)
 
     def generate_S(self, SNR):
         R = np.sum(self.M)
@@ -200,7 +227,7 @@ class AudioSourceSeperation:
         # print("P Generated")
         self.P = P
         return P
-
+        
     def MCMC(self, w_init, n_iters=30, beta=40):
         # theta = [w1,w2]
         # theta = theta_init
@@ -222,7 +249,6 @@ class AudioSourceSeperation:
             # new sigma = (either old or new)
 
             # theta = [new_root, new_sigma]
-             
         X = []
         acc = 0
         w_prev = w_init
@@ -230,7 +256,8 @@ class AudioSourceSeperation:
         ll_prev = self.log_posterior(w_prev)
 
 
-        rand = [np.exp(-2*i/n_iters) for i in np.arange(n_iters)]
+
+        # rand = [np.exp(-2*i/n_iters) for i in np.arange(n_iters)]
 
         for i in tqdm(range(n_iters)):
 
@@ -252,11 +279,178 @@ class AudioSourceSeperation:
                 ll_prev = ll_new
             else:
                 X.append(w_prev)
-
+        self.final_w = X[-1]
         return X, acc / n_iters
+    
+    def singleMCMC(self, w_init, n_iters=30, sd=40):
+        # theta = [w1,w2]
+        # theta = theta_init
+
+        # while l < L:
+
+            # theta =  theta_last
+            # form candidate root frequencies
+                # 85% normal distribution around previous theta[0]
+                # 15% uniform distribution
+                # theta[0] = new theta
+            # MH step
+            # new root_freq = (either old or new)
+
+            # theta = theta_last
+            # form candidate sigma
+                # theta[1] = new theta
+            # MH step
+            # new sigma = (either old or new)
+
+            # theta = [new_root, new_sigma]
+        X = []
+        acc = 0
+        w_prev = w_init
+        ll_prev = self.single_log_posterior(w_prev)
+
+
+        rand = [np.exp(-2*i/n_iters) for i in np.arange(n_iters)]
+
+        for i in range(n_iters):
+
+            w_new = min(max(w_prev + rand[i] * np.array(np.random.normal(0, sd)), [0]), [1500])
+
+            ll_new = self.single_log_posterior(w_new)
+            
+            print(f"proposal:{w_new}, {ll_new}")
+            print(f"current:{w_prev}, {ll_prev}")
+
+            log_alpha = np.minimum(ll_new - ll_prev, 0) #: Calculate pCN acceptance probability
+            log_u = np.log(np.random.random())
+
+            # Accept/Reject
+            accept = log_alpha >= log_u #: Compare log_alpha and log_u to accept/reject sample (accept should be boolean)
+            if accept:
+                acc += 1
+                X.append(w_new)
+                w_prev = w_new
+                ll_prev = ll_new
+            else:
+                X.append(w_prev)
+        self.final_w = X[-1]
+        return X, acc / n_iters
+    
+    def doublehalfMCMC(self, w_init, n_iters=30, sd=40, prob_half = 0.1):
+        # theta = [w1,w2]
+        # theta = theta_init
+
+        # while l < L:
+
+            # theta =  theta_last
+            # form candidate root frequencies
+                # 85% normal distribution around previous theta[0]
+                # 15% uniform distribution
+                # theta[0] = new theta
+            # MH step
+            # new root_freq = (either old or new)
+
+            # theta = theta_last
+            # form candidate sigma
+                # theta[1] = new theta
+            # MH step
+            # new sigma = (either old or new)
+
+            # theta = [new_root, new_sigma]
+        X = []
+        acc = 0
+        w_prev = w_init
+        ll_prev = self.single_log_posterior(w_prev)
+
+
+        anneal = [np.exp(-2*i/n_iters) for i in np.arange(n_iters)]
+        rand = np.random.rand(n_iters)
+
+        for i in tqdm(range(n_iters)):
+            print(rand[i])
+
+            if (rand[i]<0.5*prob_half): # double freq 
+                w_new = np.dot(2,w_prev)
+            
+            elif (rand[i]>0.5*prob_half and rand[i]<prob_half): # half freq
+                w_new = np.dot(0.5,w_prev)
+
+            else:
+                w_new = min(max(w_prev + anneal[i] * np.array(np.random.normal(0, sd)), 0), 1500)
+
+            ll_new = self.single_log_posterior(w_new)
+            
+            print(f"proposal:{w_new}, {ll_new}")
+            print(f"current:{w_prev}, {ll_prev}")
+
+            log_alpha = np.minimum(ll_new - ll_prev, 0) #: Calculate pCN acceptance probability
+            log_u = np.log(np.random.random())
+
+            # Accept/Reject
+            accept = log_alpha >= log_u #: Compare log_alpha and log_u to accept/reject sample (accept should be boolean)
+            if accept:
+                acc += 1
+                X.append(w_new)
+                w_prev = w_new
+                ll_prev = ll_new
+            else:
+                X.append(w_prev)
+        self.final_w = X[-1]
+        return X, acc / n_iters
+    
+    def calculate_B(self):
+        mean = self.S @ self.D.T @ self.samples
+        self.B = mean
+        return mean
+    
+    def compare_residuals(self, w_test):
+        SNR = 15
+        gamma,nu = 1e-4,1e-4
+        self.M = [11]
+        self.K = 1
+        self.w = w_test
+        self.generate_M_K_w(w_test, self.M)
+
+        self.generate_D()
+        
+        # start = time.process_time()
+        self.generate_S(SNR)
+        # print("Generate S:", time.process_time() - start)
+
+
+        self.calculate_B()
+
+        y_predicted = self.D @ self.B
+        error = self.samples - y_predicted
+
+        # Number of samplepoints
+        N = len(error)
+        # sample spacing
+        T = 1.0 / self.rate
+        x = np.linspace(0.0, N * T, N)
+        yf = scipy.fftpack.fft(error)
+        xf = np.linspace(0.0, 1.0 / (2.0 * T), N // 2)
+
+        fig, ax = plt.subplots()
+        mag = max(2.0 / N * np.abs(yf[:N // 2]))
+
+        tnrfont = {'fontname':'Times New Roman',
+           'size': 13}
+        
+        ax.plot(xf, 2.0 / N * np.abs(yf[:N // 2]), color = "black")
+        fig.suptitle(f"FFT of Residual Error with $w_0$={self.w[0]:.2f}Hz", **tnrfont)
+        plt.grid(lw = 0.5)
+        plt.xlabel("Frequency/ Hz", **tnrfont)
+        plt.ylabel("Magnitude", **tnrfont)
+        plt.xlim([0,5000])
+        plt.show()
+
+    
 
     def fft_plot(self):
         colours = ["blue","orange", "green", "red", "pink"]
+
+        tnrfont = {'fontname':'Times New Roman',
+           'size': 13}
 
         colours_arg = []
         for i, order in enumerate(self.M):
@@ -272,16 +466,24 @@ class AudioSourceSeperation:
         yf = scipy.fftpack.fft(self.samples)
         xf = np.linspace(0.0, 1.0 / (2.0 * T), N // 2)
 
+        # m = max(2.0 / N * np.abs(yf[:N // 2]))
+        # # pos = (2.0 / N * np.abs(yf[:N // 2])).index(m)
+        # itemindex = np.where((2.0 / N * np.abs(yf[:N // 2])) == m)
+        # max_freq = xf[itemindex]
+
         fig, ax = plt.subplots()
         mag = max(2.0 / N * np.abs(yf[:N // 2]))
+        
 
+        # final_w = [self.final_w* i for i in range(M[0])]
         ax.vlines(self.ws, -0.1*mag, 0.1*mag, colors=colours_arg)
-        ax.plot(xf, 2.0 / N * np.abs(yf[:N // 2]))
-        fig.suptitle("FFT of d4 + e5 with harmonics \n w = [293.66Hz, 659.25Hz]")
-        plt.xlabel("Frequency")
-        plt.ylabel("Magnitude")
+        ax.plot(xf, 2.0 / N * np.abs(yf[:N // 2]), color = "black")
+        fig.suptitle(f"FFT with w ={self.w[0]:.2f}Hz Harmonics Shown", **tnrfont)
+        plt.xlabel("Frequency", **tnrfont)
+        plt.ylabel("Magnitude", **tnrfont)
         plt.xlim([0,5000])
         plt.show()
+
 
     def MLE(self):
         B = np.linalg.inv(self.D.T @ self.D) @ self.D.T @ self.samples
