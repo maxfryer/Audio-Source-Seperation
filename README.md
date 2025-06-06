@@ -29,7 +29,3 @@ plot.py
 **Reading**:
   * Folder containing useful reading
   * Also contains TMR
-
-
-Project Log (Read-Only)
-https://www.overleaf.com/read/sdxyhdyykxnm
